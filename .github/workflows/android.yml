@@ -1,26 +1,20 @@
 name: Build Android APK
-
 on: [push, pull_request]
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
-
       - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           target: aarch64-linux-android
           override: true
-
       - name: Install cargo-apk2
         run: cargo install cargo-apk2
-
       - name: Build APK
         run: cargo apk2 build --release
-
       - name: Upload APK
         uses: actions/upload-artifact@v3
         with:
