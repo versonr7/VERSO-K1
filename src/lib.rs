@@ -11,6 +11,9 @@ mod transformer;
 mod learn;
 mod ui;
 
+#[link(name = "EGL")]
+extern "C" {}
+
 #[no_mangle]
 fn android_main(app: AndroidApp) {
     android_logger::init_once(
