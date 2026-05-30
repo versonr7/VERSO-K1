@@ -16,19 +16,16 @@ extern "C" {}
 
 #[no_mangle]
 extern "C" fn android_main(app: AndroidApp) {
-    // 1. Panic handler — يسجل قبل ما يموت
     std::panic::set_hook(Box::new(|info| {
         log::error!("PANIC: {}", info);
         std::thread::sleep(std::time::Duration::from_secs(3));
     }));
 
-    // 2. Logger
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Debug)
     );
     info!("VERSO K1 Booting...");
 
-    // 3. Catch any panic
     if let Err(e) = std::panic::catch_unwind(|| run_app(app)) {
         log::error!("APP CRASHED: {:?}", e);
         std::thread::sleep(std::time::Duration::from_secs(5));
@@ -94,6 +91,9 @@ fn run_app(app: AndroidApp) {
 
     info!("Entering main loop...");
     loop {
+        // 🔴 مهم: لا تستهلك CPU 100% — اترك وقت للـ system
+        std::thread::sleep(std::time::Duration::from_millis(16)); // ~60 FPS
+
         if let Ok(mut iter) = app.input_events_iter() {
             loop {
                 let read_input = iter.next(|event| {
