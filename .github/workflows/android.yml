@@ -11,10 +11,10 @@ jobs:
           targets: aarch64-linux-android
       - name: Install cargo-apk2
         run: cargo install cargo-apk2
-      - name: Build APK
-        run: cargo apk2 build --release
+      - name: Build Debug APK
+        run: cargo apk2 build
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: verso-k1-apk
-          path: target/release/apk/*.apk
+          name: verso-k1-debug-apk
+          path: target/debug/apk/*.apk
