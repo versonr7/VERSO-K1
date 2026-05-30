@@ -1,4 +1,5 @@
 use android_activity::AndroidApp;
+use android_activity::InputStatus;
 use android_activity::input::{InputEvent, MotionAction};
 use imgui::Context;
 use imgui_glow_renderer::Renderer;
@@ -72,20 +73,33 @@ fn android_main(app: AndroidApp) {
     let mut touch_down: bool = false;
 
     loop {
-        // 1. Process input
+        // 1. Process input — InputStatus in 0.6.1
         if let Ok(mut iter) = app.input_events_iter() {
-            while let Some(event) = iter.next() {
-                match event {
-                    InputEvent::MotionEvent(motion) => {
-                        touch_x = motion.x() as f32;
-                        touch_y = motion.y() as f32;
-                        touch_down = match motion.action() {
-                            MotionAction::Down | MotionAction::Move => true,
-                            MotionAction::Up | MotionAction::Cancel => false,
-                            _ => touch_down,
-                        };
+            loop {
+                let read_input = iter.next(|event| {
+                    match event {
+                        InputEvent::MotionEvent(motion) => {
+                            let pointer = motion.pointer_at_index(0);
+                            touch_x = pointer.x() as f32;
+                            touch_y = pointer.y() as f32;
+                            
+                            match motion.action() {
+                                MotionAction::Down | MotionAction::Move => {
+                                    touch_down = true;
+                                }
+                                MotionAction::Up | MotionAction::Cancel => {
+                                    touch_down = false;
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
                     }
-                    _ => {}
+                    InputStatus::Unhandled
+                });
+
+                if !read_input {
+                    break;
                 }
             }
         }

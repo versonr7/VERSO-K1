@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-android-activity = { version = "0.5", features = ["native-activity"] }
+android-activity = { version = "0.6.1", features = ["native-activity"] }
 khronos-egl = { version = "6.0.0", features = ["static", "no-pkg-config"] }
 glow = "0.12"
 imgui = "0.11"
