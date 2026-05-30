@@ -1,7 +1,7 @@
-use imgui::Ui;
 use crate::db::ProjectDB;
-use crate::transformer::CodeTransformer;
 use crate::learn::UserLearner;
+use crate::transformer::CodeTransformer;
+use imgui::Ui;
 
 pub fn draw_ui(
     ui: &Ui,

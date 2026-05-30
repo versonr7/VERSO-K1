@@ -1,14 +1,14 @@
+use android_activity::input::{InputEvent, MotionAction};
 use android_activity::AndroidApp;
 use android_activity::InputStatus;
-use android_activity::input::{InputEvent, MotionAction};
 use imgui::Context;
 use imgui_glow_renderer::Renderer;
 use khronos_egl as egl;
 use log::info;
 
 mod db;
-mod transformer;
 mod learn;
+mod transformer;
 mod ui;
 
 #[link(name = "EGL")]
@@ -17,7 +17,7 @@ extern "C" {}
 #[no_mangle]
 fn android_main(app: AndroidApp) {
     android_logger::init_once(
-        android_logger::Config::default().with_max_level(log::LevelFilter::Debug)
+        android_logger::Config::default().with_max_level(log::LevelFilter::Debug),
     );
     info!("VERSO K1 Booting...");
 
@@ -30,11 +30,16 @@ fn android_main(app: AndroidApp) {
     egl.initialize(display).unwrap();
 
     let attribs = [
-        egl::RENDERABLE_TYPE, egl::OPENGL_ES2_BIT,
-        egl::SURFACE_TYPE, egl::WINDOW_BIT,
-        egl::BLUE_SIZE, 8,
-        egl::GREEN_SIZE, 8,
-        egl::RED_SIZE, 8,
+        egl::RENDERABLE_TYPE,
+        egl::OPENGL_ES2_BIT,
+        egl::SURFACE_TYPE,
+        egl::WINDOW_BIT,
+        egl::BLUE_SIZE,
+        8,
+        egl::GREEN_SIZE,
+        8,
+        egl::RED_SIZE,
+        8,
         egl::NONE,
     ];
     let mut configs = Vec::new();
@@ -48,24 +53,29 @@ fn android_main(app: AndroidApp) {
             config,
             native_window.ptr().as_ptr() as egl::NativeWindowType,
             None,
-        ).unwrap()
+        )
+        .unwrap()
     };
 
     let ctx_attribs = [egl::CONTEXT_CLIENT_VERSION, 2, egl::NONE];
-    let context = egl.create_context(display, config, None, &ctx_attribs).unwrap();
-    egl.make_current(display, Some(surface), Some(surface), Some(context)).unwrap();
+    let context = egl
+        .create_context(display, config, None, &ctx_attribs)
+        .unwrap();
+    egl.make_current(display, Some(surface), Some(surface), Some(context))
+        .unwrap();
 
     let gl = unsafe {
         glow::Context::from_loader_function(|s| {
-            egl.get_proc_address(s).map(|p| p as *const _)
+            egl.get_proc_address(s)
+                .map(|p| p as *const _)
                 .unwrap_or(std::ptr::null())
         })
     };
 
     let mut imgui = Context::create();
     let mut texture_map = imgui_glow_renderer::SimpleTextureMap::default();
-    let mut renderer = Renderer::initialize(&gl, &mut imgui, &mut texture_map, true)
-        .expect("Renderer failed");
+    let mut renderer =
+        Renderer::initialize(&gl, &mut imgui, &mut texture_map, true).expect("Renderer failed");
 
     // Touch state
     let mut touch_x: f32 = 0.0;
@@ -82,7 +92,7 @@ fn android_main(app: AndroidApp) {
                             let pointer = motion.pointer_at_index(0);
                             touch_x = pointer.x() as f32;
                             touch_y = pointer.y() as f32;
-                            
+
                             match motion.action() {
                                 MotionAction::Down | MotionAction::Move => {
                                     touch_down = true;
@@ -117,7 +127,9 @@ fn android_main(app: AndroidApp) {
 
         // 4. Render
         let draw_data = imgui.render();
-        renderer.render(&gl, &mut texture_map, draw_data).expect("Render error");
+        renderer
+            .render(&gl, &mut texture_map, draw_data)
+            .expect("Render error");
 
         egl.swap_buffers(display, surface).unwrap();
     }

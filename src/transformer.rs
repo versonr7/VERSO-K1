@@ -88,8 +88,12 @@ impl CodeTransformer {
         x + ff_out
     }
 
-    pub fn vocab_size(&self) -> usize { self.vocab_size }
-    pub fn d_model(&self) -> usize { self.d_model }
+    pub fn vocab_size(&self) -> usize {
+        self.vocab_size
+    }
+    pub fn d_model(&self) -> usize {
+        self.d_model
+    }
 }
 
 #[cfg(test)]

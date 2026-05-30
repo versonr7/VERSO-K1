@@ -42,18 +42,19 @@ impl ProjectDB {
     pub fn get_projects(&self) -> Result<Vec<Project>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, path, language, last_opened 
-             FROM projects ORDER BY last_opened DESC"
+             FROM projects ORDER BY last_opened DESC",
         )?;
-        let projects = stmt.query_map([], |row| {
-            Ok(Project {
-                id: row.get(0)?,
-                name: row.get(1)?,
-                path: row.get(2)?,
-                language: row.get(3)?,
-                last_opened: row.get(4)?,
-            })
-        })?
-        .collect::<Result<Vec<_>>>()?;
+        let projects = stmt
+            .query_map([], |row| {
+                Ok(Project {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    path: row.get(2)?,
+                    language: row.get(3)?,
+                    last_opened: row.get(4)?,
+                })
+            })?
+            .collect::<Result<Vec<_>>>()?;
         Ok(projects)
     }
 
@@ -84,9 +85,9 @@ mod tests {
     #[test]
     fn test_remember_project() {
         let db = ProjectDB::new().unwrap();
-        db.remember_project("MyApp", "/data/myapp", "python").unwrap();
+        db.remember_project("MyApp", "/data/myapp", "python")
+            .unwrap();
         let projects = db.get_projects().unwrap();
         assert_eq!(projects[0].language, "python");
-
     }
 }
