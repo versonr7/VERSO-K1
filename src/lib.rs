@@ -1,6 +1,5 @@
 use android_activity::AndroidApp;
-use android_activity::InputStatus;
-use android_activity::input::InputEvent;
+use android_activity::input::{InputEvent, MotionAction};
 use imgui::Context;
 use imgui_glow_renderer::Renderer;
 use khronos_egl as egl;
@@ -67,17 +66,42 @@ fn android_main(app: AndroidApp) {
     let mut renderer = Renderer::initialize(&gl, &mut imgui, &mut texture_map, true)
         .expect("Renderer failed");
 
-    loop {
-        app.input_events(|event| {
-            if let InputEvent::MotionEvent(_motion) = event {
-                // Touch handling later
-            }
-            InputStatus::Unhandled
-        });
+    // Touch state
+    let mut touch_x: f32 = 0.0;
+    let mut touch_y: f32 = 0.0;
+    let mut touch_down: bool = false;
 
+    loop {
+        // 1. Process input
+        if let Ok(mut iter) = app.input_events_iter() {
+            while let Some(event) = iter.next() {
+                match event {
+                    InputEvent::MotionEvent(motion) => {
+                        touch_x = motion.x() as f32;
+                        touch_y = motion.y() as f32;
+                        touch_down = match motion.action() {
+                            MotionAction::Down | MotionAction::Move => true,
+                            MotionAction::Up | MotionAction::Cancel => false,
+                            _ => touch_down,
+                        };
+                    }
+                    _ => {}
+                }
+            }
+        }
+
+        // 2. Update imgui IO with touch
+        {
+            let io = imgui.io_mut();
+            io.mouse_pos = [touch_x, touch_y];
+            io.mouse_down[0] = touch_down;
+        }
+
+        // 3. Build UI
         let ui = imgui.frame();
         ui::draw_ui(&ui, &db, &mut transformer, &mut learner);
 
+        // 4. Render
         let draw_data = imgui.render();
         renderer.render(&gl, &mut texture_map, draw_data).expect("Render error");
 
