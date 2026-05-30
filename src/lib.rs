@@ -21,6 +21,11 @@ extern "C" fn android_main(app: AndroidApp) {
     );
     info!("VERSO K1 Booting...");
 
+    // لا نستخدم catch_unwind — android_activity يديره
+    run_app(app);
+}
+
+fn run_app(app: AndroidApp) {
     let db = db::ProjectDB::new().expect("DB init failed");
     let mut transformer = transformer::CodeTransformer::new(128, 64, 4);
     let mut learner = learn::UserLearner::new();
@@ -79,7 +84,6 @@ extern "C" fn android_main(app: AndroidApp) {
 
     info!("LOOP START");
     loop {
-        // 🔴 مهم: لا تستهلك CPU 100%
         std::thread::sleep(std::time::Duration::from_millis(16));
 
         if let Ok(mut iter) = app.input_events_iter() {
@@ -112,5 +116,35 @@ extern "C" fn android_main(app: AndroidApp) {
         renderer.render(&gl, &mut texture_map, draw_data).expect("Render error");
 
         egl.swap_buffers(display, surface).unwrap();
+    }
+}
+
+
+
+
+#[cfg(test)]
+mod android_tests {
+    use std::panic;
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn test_panic_hook_works() {
+        let panic_called = Arc::new(AtomicBool::new(false));
+        let panic_called_clone = Arc::clone(&panic_called);
+        
+        let old_hook = panic::take_hook();
+        panic::set_hook(Box::new(move |_| {
+            panic_called_clone.store(true, Ordering::SeqCst);
+        }));
+        
+        // simulate panic
+        let _ = panic::catch_unwind(|| {
+            panic!("test");
+        });
+        
+        panic::set_hook(old_hook);
+        
+        assert!(panic_called.load(Ordering::SeqCst), "Panic hook should be called");
     }
 }
