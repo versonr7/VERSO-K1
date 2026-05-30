@@ -16,28 +16,16 @@ extern "C" {}
 
 #[no_mangle]
 extern "C" fn android_main(app: AndroidApp) {
-    std::panic::set_hook(Box::new(|info| {
-        log::error!("PANIC: {}", info);
-        std::thread::sleep(std::time::Duration::from_secs(3));
-    }));
-
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Debug)
     );
     info!("VERSO K1 Booting...");
 
-    if let Err(e) = std::panic::catch_unwind(|| run_app(app)) {
-        log::error!("APP CRASHED: {:?}", e);
-        std::thread::sleep(std::time::Duration::from_secs(5));
-    }
-}
-
-fn run_app(app: AndroidApp) {
     let db = db::ProjectDB::new().expect("DB init failed");
     let mut transformer = transformer::CodeTransformer::new(128, 64, 4);
     let mut learner = learn::UserLearner::new();
 
-    info!("Initializing EGL...");
+    info!("EGL init...");
     let egl = egl::Instance::new(egl::Static);
     let display = unsafe { egl.get_display(egl::DEFAULT_DISPLAY).unwrap() };
     egl.initialize(display).unwrap();
@@ -54,7 +42,7 @@ fn run_app(app: AndroidApp) {
     egl.choose_config(display, &attribs, &mut configs).unwrap();
     let config = configs.into_iter().next().unwrap();
 
-    info!("Creating window surface...");
+    info!("Window surface...");
     let native_window = app.native_window().expect("No native window");
     let surface = unsafe {
         egl.create_window_surface(
@@ -65,12 +53,12 @@ fn run_app(app: AndroidApp) {
         ).unwrap()
     };
 
-    info!("Creating GL context...");
+    info!("GL context...");
     let ctx_attribs = [egl::CONTEXT_CLIENT_VERSION, 2, egl::NONE];
     let context = egl.create_context(display, config, None, &ctx_attribs).unwrap();
     egl.make_current(display, Some(surface), Some(surface), Some(context)).unwrap();
 
-    info!("Creating glow context...");
+    info!("Glow...");
     let gl = unsafe {
         glow::Context::from_loader_function(|s| {
             egl.get_proc_address(s)
@@ -79,7 +67,7 @@ fn run_app(app: AndroidApp) {
         })
     };
 
-    info!("Creating imgui...");
+    info!("ImGui...");
     let mut imgui = Context::create();
     let mut texture_map = imgui_glow_renderer::SimpleTextureMap::default();
     let mut renderer = Renderer::initialize(&gl, &mut imgui, &mut texture_map, true)
@@ -89,10 +77,10 @@ fn run_app(app: AndroidApp) {
     let mut touch_y: f32 = 0.0;
     let mut touch_down: bool = false;
 
-    info!("Entering main loop...");
+    info!("LOOP START");
     loop {
-        // 🔴 مهم: لا تستهلك CPU 100% — اترك وقت للـ system
-        std::thread::sleep(std::time::Duration::from_millis(16)); // ~60 FPS
+        // 🔴 مهم: لا تستهلك CPU 100%
+        std::thread::sleep(std::time::Duration::from_millis(16));
 
         if let Ok(mut iter) = app.input_events_iter() {
             loop {
@@ -101,7 +89,6 @@ fn run_app(app: AndroidApp) {
                         let pointer = motion.pointer_at_index(0);
                         touch_x = pointer.x();
                         touch_y = pointer.y();
-
                         match motion.action() {
                             MotionAction::Down | MotionAction::Move => touch_down = true,
                             MotionAction::Up | MotionAction::Cancel => touch_down = false,
@@ -110,16 +97,13 @@ fn run_app(app: AndroidApp) {
                     }
                     InputStatus::Unhandled
                 });
-
                 if !read_input { break; }
             }
         }
 
-        {
-            let io = imgui.io_mut();
-            io.mouse_pos = [touch_x, touch_y];
-            io.mouse_down[0] = touch_down;
-        }
+        let io = imgui.io_mut();
+        io.mouse_pos = [touch_x, touch_y];
+        io.mouse_down[0] = touch_down;
 
         let ui = imgui.frame();
         ui::draw_ui(&ui, &db, &mut transformer, &mut learner);
