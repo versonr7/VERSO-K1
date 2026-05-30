@@ -34,12 +34,12 @@ fn run_app(app: AndroidApp) {
 
     let egl = egl::Instance::new(egl::Static);
 
-    let mut egl_display: Option<<egl::Display> = None;
-    let mut egl_surface: Option<<egl::Surface> = None;
-    let mut egl_context: Option<<egl::Context> = None;
-    let mut gl: Option<<glow::Context> = None;
+    let mut egl_display: Option<egl::Display> = None;
+    let mut egl_surface: Option<egl::Surface> = None;
+    let mut egl_context: Option<egl::Context> = None;
+    let mut gl: Option<glow::Context> = None;
     let mut imgui_ctx: Option<imgui::Context> = None;
-    let mut renderer: Option<<Renderer> = None;
+    let mut renderer: Option<Renderer> = None;
     let mut texture_map: Option<imgui_glow_renderer::SimpleTextureMap> = None;
 
     let mut touch_x: f32 = 0.0;
@@ -133,7 +133,7 @@ fn run_app(app: AndroidApp) {
                             texture_map = Some(tex_map);
                             info!("EGL/GL/ImGui ready");
                         }
-                        MainEvent::Terminate { .. } => {
+                        MainEvent::TerminateWindow { .. } => {
                             info!("Terminate: cleaning up...");
                             if let Some(display) = egl_display.take() {
                                 if let Some(context) = egl_context.take() {
