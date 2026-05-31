@@ -67,7 +67,7 @@ fn run_app(app: AndroidApp) {
                             }
 
                             let attribs = [
-                                egl::RENDERABLE_TYPE, egl::OPENGL_ES2_BIT,
+                                egl::RENDERABLE_TYPE, egl::OPENGL_ES3_BIT,
                                 egl::SURFACE_TYPE, egl::WINDOW_BIT,
                                 egl::BLUE_SIZE, 8,
                                 egl::GREEN_SIZE, 8,
@@ -99,7 +99,7 @@ fn run_app(app: AndroidApp) {
                                 }
                             };
 
-                            let ctx_attribs = [egl::CONTEXT_CLIENT_VERSION, 2, egl::NONE];
+                            let ctx_attribs = [egl::CONTEXT_CLIENT_VERSION, 3, egl::NONE];
                             let context = match egl.create_context(display, config, None, &ctx_attribs) {
                                 Ok(c) => c,
                                 Err(e) => { error!("create_context failed: {:?}", e); return; }
