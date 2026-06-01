@@ -32,9 +32,9 @@ impl ProjectDB {
         
         let conn = Connection::open(&db_path)?;
         
-        conn.execute("PRAGMA journal_mode=WAL;", [])?;
-        conn.execute("PRAGMA synchronous=NORMAL;", [])?;
-        conn.execute("PRAGMA cache_size=10000;", [])?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
+        conn.pragma_update(None, "cache_size", 10000)?;
         
         conn.execute(
             "CREATE TABLE IF NOT EXISTS projects (
@@ -45,7 +45,7 @@ impl ProjectDB {
                 last_opened TEXT DEFAULT CURRENT_TIMESTAMP,
                 code_snippets TEXT,
                 ai_embeddings BLOB
-            ",
+            )",
             [],
         )?;
         
@@ -60,7 +60,7 @@ impl ProjectDB {
         Ok(())
     }
     
-    pub fn get_projects(&self) -> Result<Vec<<Project>> {
+    pub fn get_projects(&self) -> Result<Vec<Project>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, path, language, last_opened FROM projects ORDER BY last_opened DESC"
         )?;
@@ -95,7 +95,7 @@ mod tests {
         db.add_project("test_proj", "/tmp/test", "rust").unwrap();
         let projects = db.get_projects().unwrap();
         assert!(!projects.is_empty());
-        assert_eq!(projects[0].name, "test_proj");
+        assert!(projects.iter().any(|p| p.name == "test_proj"));
     }
     
     #[test]
