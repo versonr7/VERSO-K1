@@ -8,12 +8,36 @@ pub fn draw_ui(
     db: &ProjectDB,
     transformer: &mut CodeTransformer,
     learner: &mut UserLearner,
+    keyboard_buffer: &str,
 ) {
     ui.window("VERSO K1 - AI Coding Assistant")
         .size([420.0, 640.0], imgui::Condition::FirstUseEver)
         .position([10.0, 10.0], imgui::Condition::FirstUseEver)
         .build(|| {
             ui.text("AI Powered Code Assistant");
+            ui.separator();
+
+            // === Chat Display ===
+            ui.text("Chat:");
+            ui.separator();
+
+            // === Input Field (from physical keyboard) ===
+            ui.text("Type (physical keyboard):");
+            let display_text = if keyboard_buffer.is_empty() {
+                "..."
+            } else {
+                keyboard_buffer
+            };
+            let mut buf = display_text.to_string();
+            ui.input_text_multiline("##chat_input", &mut buf, [400.0, 80.0])
+                .read_only(true)
+                .build();
+
+            if ui.button("Send") && !keyboard_buffer.is_empty() {
+                // TODO: send to zLNN / store in SQLite
+                learner.record_action("send_message", "chat");
+            }
+
             ui.separator();
 
             // === Projects ===

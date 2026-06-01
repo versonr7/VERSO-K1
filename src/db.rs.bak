@@ -1,4 +1,4 @@
-use rusqlite::{Connection, Result, params};
+use rusqlite::{Connection, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -16,15 +16,15 @@ pub struct ProjectDB {
 
 impl ProjectDB {
     pub fn new() -> Result<Self> {
-        #[cfg(test)]
+        #[cfg(target_os = "android")]
+        let db_path = "/data/data/rust.verso_k1/databases/projects.db";
+        
+        #[cfg(not(target_os = "android"))]
         let db_path = {
             let mut path = std::env::temp_dir();
-            path.push("verso_k1_projects_test.db");
+            path.push("verso_k1_projects.db");
             path.to_str().unwrap().to_string()
         };
-        
-        #[cfg(not(test))]
-        let db_path = "/data/data/rust.verso_k1/databases/projects.db";
         
         if let Some(parent) = std::path::Path::new(&db_path).parent() {
             let _ = std::fs::create_dir_all(parent);
@@ -42,10 +42,10 @@ impl ProjectDB {
                 name TEXT NOT NULL,
                 path TEXT NOT NULL,
                 language TEXT,
-                last_opened TEXT DEFAULT CURRENT_TIMESTAMP,
+                last_opened TEXT,
                 code_snippets TEXT,
                 ai_embeddings BLOB
-            ",
+            )",
             [],
         )?;
         
@@ -54,15 +54,17 @@ impl ProjectDB {
     
     pub fn add_project(&self, name: &str, path: &str, language: &str) -> Result<()> {
         self.conn.execute(
-            "INSERT INTO projects (name, path, language) VALUES (?1, ?2, ?3)",
-            params![name, path, language],
+            "INSERT INTO projects (name, path, language, last_opened)
+             VALUES (?1, ?2, ?3, datetime(now))",
+            [name, path, language],
         )?;
         Ok(())
     }
     
     pub fn get_projects(&self) -> Result<Vec<<Project>> {
         let mut stmt = self.conn.prepare(
-            "SELECT id, name, path, language, last_opened FROM projects ORDER BY last_opened DESC"
+            "SELECT id, name, path, language, last_opened
+             FROM projects ORDER BY last_opened DESC"
         )?;
         let projects = stmt.query_map([], |row| {
             Ok(Project {
@@ -78,8 +80,9 @@ impl ProjectDB {
     
     pub fn remember_project(&self, name: &str, path: &str, language: &str) -> Result<()> {
         self.conn.execute(
-            "INSERT OR REPLACE INTO projects (name, path, language) VALUES (?1, ?2, ?3)",
-            params![name, path, language],
+            "INSERT OR REPLACE INTO projects (name, path, language, last_opened)
+             VALUES (?1, ?2, ?3, datetime(now))",
+            [name, path, language],
         )?;
         Ok(())
     }

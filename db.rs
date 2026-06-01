@@ -22,20 +22,20 @@ impl ProjectDB {
             path.push("verso_k1_projects_test.db");
             path.to_str().unwrap().to_string()
         };
-        
+
         #[cfg(not(test))]
         let db_path = "/data/data/rust.verso_k1/databases/projects.db";
-        
+
         if let Some(parent) = std::path::Path::new(&db_path).parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        
+
         let conn = Connection::open(&db_path)?;
-        
+
         conn.execute("PRAGMA journal_mode=WAL;", [])?;
         conn.execute("PRAGMA synchronous=NORMAL;", [])?;
         conn.execute("PRAGMA cache_size=10000;", [])?;
-        
+
         conn.execute(
             "CREATE TABLE IF NOT EXISTS projects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -45,13 +45,13 @@ impl ProjectDB {
                 last_opened TEXT DEFAULT CURRENT_TIMESTAMP,
                 code_snippets TEXT,
                 ai_embeddings BLOB
-            ",
+            )",
             [],
         )?;
-        
+
         Ok(Self { conn })
     }
-    
+
     pub fn add_project(&self, name: &str, path: &str, language: &str) -> Result<()> {
         self.conn.execute(
             "INSERT INTO projects (name, path, language) VALUES (?1, ?2, ?3)",
@@ -59,8 +59,8 @@ impl ProjectDB {
         )?;
         Ok(())
     }
-    
-    pub fn get_projects(&self) -> Result<Vec<<Project>> {
+
+    pub fn get_projects(&self) -> Result<Vec<Project>> {
         let mut stmt = self.conn.prepare(
             "SELECT id, name, path, language, last_opened FROM projects ORDER BY last_opened DESC"
         )?;
@@ -75,7 +75,7 @@ impl ProjectDB {
         })?;
         projects.collect()
     }
-    
+
     pub fn remember_project(&self, name: &str, path: &str, language: &str) -> Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO projects (name, path, language) VALUES (?1, ?2, ?3)",
@@ -88,7 +88,7 @@ impl ProjectDB {
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_db_create_and_insert() {
         let db = ProjectDB::new().unwrap();
@@ -97,7 +97,7 @@ mod tests {
         assert!(!projects.is_empty());
         assert_eq!(projects[0].name, "test_proj");
     }
-    
+
     #[test]
     fn test_remember_project() {
         let db = ProjectDB::new().unwrap();
