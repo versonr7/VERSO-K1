@@ -1,3 +1,4 @@
+use glow::HasContext as _;
 use android_activity::{AndroidApp, MainEvent, PollEvent, InputStatus};
 use android_activity::input::{InputEvent, MotionAction, KeyAction, KeyMapChar};
 use khronos_egl as egl;
@@ -234,7 +235,11 @@ fn run_app(app: AndroidApp) {
         if let (Some(display), Some(surface), Some(gl_ctx), Some(imgui), Some(rend), Some(tex_map)) =
             (egl_display, egl_surface, gl.as_ref(), imgui_ctx.as_mut(), renderer.as_mut(), texture_map.as_mut())
         {
-            let io = imgui.io_mut();
+            unsafe {
+            gl_ctx.clear_color(0.08, 0.08, 0.12, 1.0);
+            gl_ctx.clear(glow::COLOR_BUFFER_BIT);
+        }
+        let io = imgui.io_mut();
             io.mouse_pos = [touch_x, touch_y];
             io.mouse_down[0] = touch_down;
 
