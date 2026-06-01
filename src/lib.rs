@@ -70,21 +70,48 @@ fn run_app(app: AndroidApp) {
                                 error!("egl.initialize failed: {:?}", e); return;
                             }
 
+                            // Try OpenGL ES 3 first
                             let attribs = [
                                 egl::RENDERABLE_TYPE, egl::OPENGL_ES3_BIT,
                                 egl::SURFACE_TYPE, egl::WINDOW_BIT,
                                 egl::BLUE_SIZE, 8,
                                 egl::GREEN_SIZE, 8,
                                 egl::RED_SIZE, 8,
+                                egl::ALPHA_SIZE, 8,
+                                egl::DEPTH_SIZE, 16,
                                 egl::NONE,
                             ];
                             let mut configs = Vec::new();
-                            if let Err(e) = egl.choose_config(display, &attribs, &mut configs) {
-                                error!("egl.choose_config failed: {:?}", e); return;
-                            }
-                            let config = match configs.into_iter().next() {
-                                Some(c) => c,
-                                None => { error!("No EGL config found"); return; }
+                            let config = match egl.choose_config(display, &attribs, &mut configs) {
+                                Ok(_) => {
+                                    match configs.into_iter().next() {
+                                        Some(c) => { info!("EGL ES3 config found"); c }
+                                        None => {
+                                            info!("No ES3 config, trying ES2...");
+                                            let attribs2 = [
+                                                egl::RENDERABLE_TYPE, egl::OPENGL_ES2_BIT,
+                                                egl::SURFACE_TYPE, egl::WINDOW_BIT,
+                                                egl::BLUE_SIZE, 8,
+                                                egl::GREEN_SIZE, 8,
+                                                egl::RED_SIZE, 8,
+                                                egl::ALPHA_SIZE, 8,
+                                                egl::DEPTH_SIZE, 16,
+                                                egl::NONE,
+                                            ];
+                                            let mut configs2 = Vec::new();
+                                            if let Err(e) = egl.choose_config(display, &attribs2, &mut configs2) {
+                                                error!("egl.choose_config ES2 failed: {:?}", e); return;
+                                            }
+                                            match configs2.into_iter().next() {
+                                                Some(c) => { info!("EGL ES2 config found"); c }
+                                                None => { error!("No EGL config found (ES3 or ES2)"); return; }
+                                            }
+                                        }
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("egl.choose_config failed: {:?}", e); return;
+                                }
                             };
 
                             let native_window = match app.native_window() {
