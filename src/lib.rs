@@ -18,7 +18,7 @@ extern "C" fn android_main(app: AndroidApp) {
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Debug)
     );
-    info!("VERSO K1 Booting...");
+    info!("=== VERSO K1 Booting ===");
     run_app(app);
 }
 
@@ -58,7 +58,7 @@ fn run_app(app: AndroidApp) {
                     match main_event {
                         MainEvent::InitWindow { .. } => {
                             if egl_display.is_some() { return; }
-                            info!("InitWindow: initializing EGL...");
+                            info!("=== InitWindow: initializing EGL ===");
 
                             let display = unsafe {
                                 egl.get_display(egl::DEFAULT_DISPLAY)
@@ -123,8 +123,11 @@ fn run_app(app: AndroidApp) {
                             let mut imgui = imgui::Context::create();
                 {
                     let mut io = imgui.io_mut();
-                    io.display_size = [native_window.width() as f32, native_window.height() as f32];
+                    let w = native_window.width().max(1) as f32;
+                    let h = native_window.height().max(1) as f32;
+                    io.display_size = [w, h];
                     io.display_framebuffer_scale = [1.0, 1.0];
+                    info!("=== Display size set to: {}x{} ===", w, h);
                 }
                             let mut tex_map = imgui_glow_renderer::SimpleTextureMap::default();
                             let rend = match imgui_glow_renderer::Renderer::initialize(&gl_ctx, &mut imgui, &mut tex_map, true) {
@@ -139,10 +142,10 @@ fn run_app(app: AndroidApp) {
                             imgui_ctx = Some(imgui);
                             renderer = Some(rend);
                             texture_map = Some(tex_map);
-                            info!("EGL/GL/ImGui ready");
+                            info!("=== EGL/GL/ImGui ready ===");
                         }
                         MainEvent::TerminateWindow { .. } => {
-                            info!("TerminateWindow: cleaning up...");
+                            info!("=== TerminateWindow ===");
                             if let Some(display) = egl_display.take() {
                                 if let Some(context) = egl_context.take() {
                                     let _ = egl.destroy_context(display, context);
@@ -241,7 +244,7 @@ fn run_app(app: AndroidApp) {
             (egl_display, egl_surface, gl.as_ref(), imgui_ctx.as_mut(), renderer.as_mut(), texture_map.as_mut())
         {
             unsafe {
-            gl_ctx.clear_color(0.08, 0.08, 0.12, 1.0);
+            gl_ctx.clear_color(1.0, 0.0, 0.0, 1.0); // RED - debug
             gl_ctx.clear(glow::COLOR_BUFFER_BIT);
         }
         let io = imgui.io_mut();
@@ -257,7 +260,8 @@ fn run_app(app: AndroidApp) {
                 }
 
             // Pass keyboard buffer to UI
-            ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &mut keyboard_buffer);
+            let display_size = io.display_size;
+        ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &mut keyboard_buffer, display_size);
 
             let draw_data = imgui.render();
             if let Err(e) = rend.render(gl_ctx, tex_map, draw_data) {
