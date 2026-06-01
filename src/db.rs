@@ -16,7 +16,7 @@ pub struct ProjectDB {
 
 impl ProjectDB {
     pub fn new() -> Result<Self> {
-        let conn = Connection::open_in_memory()?;
+        let conn = Connection::open("/data/data/rust.verso_k1/databases/projects.db")?;
         conn.execute(
             "CREATE TABLE IF NOT EXISTS projects (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
