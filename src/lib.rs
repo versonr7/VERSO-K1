@@ -16,13 +16,14 @@ extern "C" {}
 #[no_mangle]
 extern "C" fn android_main(app: AndroidApp) {
     android_logger::init_once(
-        android_logger::Config::default().with_max_level(log::LevelFilter::Debug)
+        android_logger::Config::default().with_max_level(log::LevelFilter::Info)
     );
-    info!("=== VERSO K1 Booting ===");
+    println!("VERSO K1 BOOT"); info!("=== VERSO K1 Booting ===");
     run_app(app);
 }
 
 fn run_app(app: AndroidApp) {
+    println!("VERSO RUN_APP STARTED");
     let db = match db::ProjectDB::new() {
         Ok(d) => { info!("DB initialized"); d }
         Err(e) => { error!("DB init failed: {}", e); return; }
@@ -58,7 +59,7 @@ fn run_app(app: AndroidApp) {
                     match main_event {
                         MainEvent::InitWindow { .. } => {
                             if egl_display.is_some() { return; }
-                            info!("=== InitWindow: initializing EGL ===");
+                            println!("VERSO EGL INIT"); info!("=== InitWindow: initializing EGL ===");
 
                             let display = unsafe {
                                 egl.get_display(egl::DEFAULT_DISPLAY)
@@ -142,7 +143,7 @@ fn run_app(app: AndroidApp) {
                             imgui_ctx = Some(imgui);
                             renderer = Some(rend);
                             texture_map = Some(tex_map);
-                            info!("=== EGL/GL/ImGui ready ===");
+                            println!("VERSO EGL READY"); info!("=== EGL/GL/ImGui ready ===");
                         }
                         MainEvent::TerminateWindow { .. } => {
                             info!("=== TerminateWindow ===");
