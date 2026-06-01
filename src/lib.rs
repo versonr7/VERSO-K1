@@ -1,7 +1,5 @@
 use android_activity::{AndroidApp, MainEvent, PollEvent, InputStatus};
-use android_activity::input::{InputEvent, MotionAction};
-use imgui::Context;
-use imgui_glow_renderer::Renderer;
+use android_activity::input::{InputEvent, MotionAction, KeyAction, KeyMapChar};
 use khronos_egl as egl;
 use log::{info, error};
 use std::time::Duration;
@@ -39,17 +37,21 @@ fn run_app(app: AndroidApp) {
     let mut egl_context: Option<egl::Context> = None;
     let mut gl: Option<glow::Context> = None;
     let mut imgui_ctx: Option<imgui::Context> = None;
-    let mut renderer: Option<Renderer> = None;
+    let mut renderer: Option<imgui_glow_renderer::Renderer> = None;
     let mut texture_map: Option<imgui_glow_renderer::SimpleTextureMap> = None;
 
     let mut touch_x: f32 = 0.0;
     let mut touch_y: f32 = 0.0;
     let mut touch_down: bool = false;
+
+    // === KEYBOARD STATE ===
+    let mut keyboard_buffer: String = String::with_capacity(4096);
+    let mut combining_accent: Option<char> = None;
+
     let mut running = true;
 
     while running {
-        // 1) استمع لأحداث Android (InitWindow / Terminate / إلخ)
-        let _ = app.poll_events(Some(Duration::from_millis(0)), |event| {
+        app.poll_events(Some(Duration::from_millis(0)), |event| {
             match event {
                 PollEvent::Main(main_event) => {
                     match main_event {
@@ -117,9 +119,9 @@ fn run_app(app: AndroidApp) {
                                 })
                             };
 
-                            let mut imgui = Context::create();
+                            let mut imgui = imgui::Context::create();
                             let mut tex_map = imgui_glow_renderer::SimpleTextureMap::default();
-                            let rend = match Renderer::initialize(&gl_ctx, &mut imgui, &mut tex_map, true) {
+                            let rend = match imgui_glow_renderer::Renderer::initialize(&gl_ctx, &mut imgui, &mut tex_map, true) {
                                 Ok(r) => r,
                                 Err(e) => { error!("Renderer init failed: {:?}", e); return; }
                             };
@@ -134,7 +136,7 @@ fn run_app(app: AndroidApp) {
                             info!("EGL/GL/ImGui ready");
                         }
                         MainEvent::TerminateWindow { .. } => {
-                            info!("Terminate: cleaning up...");
+                            info!("TerminateWindow: cleaning up...");
                             if let Some(display) = egl_display.take() {
                                 if let Some(context) = egl_context.take() {
                                     let _ = egl.destroy_context(display, context);
@@ -145,8 +147,8 @@ fn run_app(app: AndroidApp) {
                                 let _ = egl.terminate(display);
                             }
                             gl = None; imgui_ctx = None; renderer = None; texture_map = None;
-                            running = false;
                         }
+                        MainEvent::Destroy => { running = false; }
                         _ => {}
                     }
                 }
@@ -156,7 +158,7 @@ fn run_app(app: AndroidApp) {
 
         if !running { break; }
 
-        // 2) معالجة اللمس (Touch)
+        // === TOUCH INPUT ===
         if let Ok(mut iter) = app.input_events_iter() {
             loop {
                 let read_input = iter.next(|event| {
@@ -176,7 +178,59 @@ fn run_app(app: AndroidApp) {
             }
         }
 
-        // 3) الرسم — فقط إذا EGL جاهز
+        // === KEYBOARD INPUT (Physical Keyboard — Arabic/English/Any!) ===
+        if let Ok(mut iter) = app.input_events_iter() {
+            loop {
+                let read_input = iter.next(|event| {
+                    if let InputEvent::KeyEvent(key_event) = event {
+                        if key_event.action() == KeyAction::Down {
+                            // Get KeyCharacterMap for this device
+                            if let Ok(map) = app.device_key_character_map(key_event.device_id()) {
+                                match map.get(key_event.key_code(), key_event.meta_state()) {
+                                    Ok(KeyMapChar::Unicode(c)) => {
+                                        // Handle combining accents (dead keys)
+                                        let final_char = if let Some(accent) = combining_accent {
+                                            match map.get_dead_char(accent, c) {
+                                                Ok(Some(combined)) => {
+                                                    info!("Combined '{}' with accent '{}' to '{}'", c, accent, combined);
+                                                    combined
+                                                }
+                                                _ => {
+                                                    keyboard_buffer.push(accent);
+                                                    c
+                                                }
+                                            }
+                                        } else {
+                                            c
+                                        };
+                                        combining_accent = None;
+                                        keyboard_buffer.push(final_char);
+                                        info!("Key pressed: '{}'", final_char);
+                                    }
+                                    Ok(KeyMapChar::CombiningAccent(accent)) => {
+                                        info!("Dead key accent: '{}'", accent);
+                                        combining_accent = Some(accent);
+                                    }
+                                    Ok(KeyMapChar::None) => {
+                                        // Non-unicode key (Enter, Backspace, arrows, etc.)
+                                        // We need to handle these separately using key_code
+                                        // For now, just log
+                                        info!("Non-unicode key: {:?}", key_event.key_code());
+                                    }
+                                    Err(e) => {
+                                        error!("Key map error: {:?}", e);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    InputStatus::Unhandled
+                });
+                if !read_input { break; }
+            }
+        }
+
+        // === RENDER ===
         if let (Some(display), Some(surface), Some(gl_ctx), Some(imgui), Some(rend), Some(tex_map)) =
             (egl_display, egl_surface, gl.as_ref(), imgui_ctx.as_mut(), renderer.as_mut(), texture_map.as_mut())
         {
@@ -184,8 +238,8 @@ fn run_app(app: AndroidApp) {
             io.mouse_pos = [touch_x, touch_y];
             io.mouse_down[0] = touch_down;
 
-            let ui = imgui.frame();
-            ui::draw_ui(&ui, &db, &mut transformer, &mut learner);
+            // Pass keyboard buffer to UI
+            ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &keyboard_buffer);
 
             let draw_data = imgui.render();
             if let Err(e) = rend.render(gl_ctx, tex_map, draw_data) {
