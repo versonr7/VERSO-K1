@@ -239,7 +239,7 @@ fn run_app(app: AndroidApp) {
             io.mouse_down[0] = touch_down;
 
             // Pass keyboard buffer to UI
-            ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &keyboard_buffer);
+            ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &mut keyboard_buffer);
 
             let draw_data = imgui.render();
             if let Err(e) = rend.render(gl_ctx, tex_map, draw_data) {
