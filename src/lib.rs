@@ -121,6 +121,11 @@ fn run_app(app: AndroidApp) {
                             };
 
                             let mut imgui = imgui::Context::create();
+                {
+                    let mut io = imgui.io_mut();
+                    io.display_size = [native_window.width() as f32, native_window.height() as f32];
+                    io.display_framebuffer_scale = [1.0, 1.0];
+                }
                             let mut tex_map = imgui_glow_renderer::SimpleTextureMap::default();
                             let rend = match imgui_glow_renderer::Renderer::initialize(&gl_ctx, &mut imgui, &mut tex_map, true) {
                                 Ok(r) => r,
@@ -242,6 +247,14 @@ fn run_app(app: AndroidApp) {
         let io = imgui.io_mut();
             io.mouse_pos = [touch_x, touch_y];
             io.mouse_down[0] = touch_down;
+                // Update display size if window changed
+                if let Some(nw) = app.native_window() {
+                    let w = nw.width() as f32;
+                    let h = nw.height() as f32;
+                    if io.display_size[0] != w || io.display_size[1] != h {
+                        io.display_size = [w, h];
+                    }
+                }
 
             // Pass keyboard buffer to UI
             ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &mut keyboard_buffer);
