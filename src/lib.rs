@@ -70,24 +70,32 @@ fn run_app(app: AndroidApp) {
                                 error!("egl.initialize failed: {:?}", e); return;
                             }
 
-                            // Minimal attribs - most permissive
-                            let attribs = [
-                                egl::SURFACE_TYPE, egl::WINDOW_BIT,
-                                egl::NONE,
-                            ];
-                            let mut configs = Vec::new();
-                            let config = match egl.choose_config(display, &attribs, &mut configs) {
-                                Ok(_) => {
-                                    match configs.into_iter().next() {
-                                        Some(c) => { info!("EGL config found (minimal attribs)"); c }
-                                        None => {
-                                            error!("No EGL configs at all (even with minimal attribs)");
-                                            return;
-                                        }
-                                    }
+                            // Get ALL configs manually
+                            let mut all_configs: Vec<egl::Config> = Vec::with_capacity(64);
+                            if let Err(e) = egl.get_configs(display, &mut all_configs) {
+                                error!("egl.get_configs failed: {:?}", e); return;
+                            }
+                            info!("EGL configs returned: {}", all_configs.len());
+
+                            if all_configs.is_empty() {
+                                error!("No EGL configs returned by system");
+                                return;
+                            }
+
+                            // Find first config with WINDOW_BIT
+                            let config = match all_configs.iter().find(|&&c| {
+                                match egl.get_config_attrib(display, c, egl::SURFACE_TYPE) {
+                                    Ok(st) => (st & egl::WINDOW_BIT) != 0,
+                                    Err(_) => false,
                                 }
-                                Err(e) => {
-                                    error!("egl.choose_config failed: {:?}", e); return;
+                            }) {
+                                Some(&c) => { info!("Found config with WINDOW_BIT"); c }
+                                None => {
+                                    info!("No WINDOW_BIT config, using first available");
+                                    match all_configs.into_iter().next() {
+                                        Some(c) => c,
+                                        None => { error!("Could not get first config"); return; }
+                                    }
                                 }
                             };
 
