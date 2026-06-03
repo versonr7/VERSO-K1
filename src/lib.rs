@@ -1,6 +1,6 @@
 use glow::HasContext as _;
 use android_activity::{AndroidApp, MainEvent, PollEvent, InputStatus};
-use android_activity::input::{InputEvent, MotionAction, KeyAction, KeyMapChar};
+use android_activity::input::{InputEvent, MotionAction};
 use khronos_egl as egl;
 use log::{info, error};
 use std::time::Duration;
@@ -18,12 +18,12 @@ extern "C" fn android_main(app: AndroidApp) {
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Info)
     );
-    println!("VERSO K1 BOOT"); info!("=== VERSO K1 Booting ===");
+    println!("VERSO K1 BOOT");
+    info!("=== VERSO K1 Booting ===");
     run_app(app);
 }
 
 fn run_app(app: AndroidApp) {
-    println!("VERSO RUN_APP STARTED");
     let db = match db::ProjectDB::new() {
         Ok(d) => { info!("DB initialized"); d }
         Err(e) => { error!("DB init failed: {}", e); return; }
@@ -46,9 +46,8 @@ fn run_app(app: AndroidApp) {
     let mut touch_y: f32 = 0.0;
     let mut touch_down: bool = false;
 
-    // === KEYBOARD STATE ===
     let mut keyboard_buffer: String = String::with_capacity(4096);
-    let mut combining_accent: Option<char> = None;
+    let mut transformer_result: Option<String> = None;
 
     let mut running = true;
 
@@ -59,18 +58,18 @@ fn run_app(app: AndroidApp) {
                     match main_event {
                         MainEvent::InitWindow { .. } => {
                             if egl_display.is_some() { return; }
-                            println!("VERSO EGL INIT"); info!("=== InitWindow: initializing EGL ===");
+                            info!("=== InitWindow: initializing EGL ===");
 
                             let display = unsafe {
                                 egl.get_display(egl::DEFAULT_DISPLAY)
                                     .expect("egl.get_display failed")
                             };
 
-                            if let Err(e) = egl.initialize(display) {
-                                error!("egl.initialize failed: {:?}", e); return;
+                            match egl.initialize(display) {
+                                Ok((major, minor)) => info!("EGL initialized: {}.{}", major, minor),
+                                Err(e) => { error!("egl.initialize failed: {:?}", e); return; }
                             }
 
-                            // Get ALL configs manually
                             let mut all_configs: Vec<egl::Config> = Vec::with_capacity(64);
                             if let Err(e) = egl.get_configs(display, &mut all_configs) {
                                 error!("egl.get_configs failed: {:?}", e); return;
@@ -82,7 +81,6 @@ fn run_app(app: AndroidApp) {
                                 return;
                             }
 
-                            // Find first config with WINDOW_BIT
                             let config = match all_configs.iter().find(|&&c| {
                                 match egl.get_config_attrib(display, c, egl::SURFACE_TYPE) {
                                     Ok(st) => (st & egl::WINDOW_BIT) != 0,
@@ -115,7 +113,7 @@ fn run_app(app: AndroidApp) {
                                 }
                             };
 
-                            let ctx_attribs = [egl::CONTEXT_CLIENT_VERSION, 3, egl::NONE];
+                            let ctx_attribs = [egl::CONTEXT_CLIENT_VERSION, 2, egl::NONE];
                             let context = match egl.create_context(display, config, None, &ctx_attribs) {
                                 Ok(c) => c,
                                 Err(e) => { error!("create_context failed: {:?}", e); return; }
@@ -134,14 +132,11 @@ fn run_app(app: AndroidApp) {
                             };
 
                             let mut imgui = imgui::Context::create();
-                {
-                    let mut io = imgui.io_mut();
-                    let w = native_window.width().max(1) as f32;
-                    let h = native_window.height().max(1) as f32;
-                    io.display_size = [w, h];
-                    io.display_framebuffer_scale = [1.0, 1.0];
-                    info!("=== Display size set to: {}x{} ===", w, h);
-                }
+                            {
+                                let mut io = imgui.io_mut();
+                                io.display_size = [native_window.width() as f32, native_window.height() as f32];
+                                io.display_framebuffer_scale = [1.0, 1.0];
+                            }
                             let mut tex_map = imgui_glow_renderer::SimpleTextureMap::default();
                             let rend = match imgui_glow_renderer::Renderer::initialize(&gl_ctx, &mut imgui, &mut tex_map, true) {
                                 Ok(r) => r,
@@ -155,7 +150,9 @@ fn run_app(app: AndroidApp) {
                             imgui_ctx = Some(imgui);
                             renderer = Some(rend);
                             texture_map = Some(tex_map);
-                            println!("VERSO EGL READY"); info!("=== EGL/GL/ImGui ready ===");
+                            info!("EGL vendor: {:?}", egl.query_string(Some(display), egl::VENDOR));
+                            info!("EGL version: {:?}", egl.query_string(Some(display), egl::VERSION));
+                            info!("=== EGL/GL/ImGui ready ===");
                         }
                         MainEvent::TerminateWindow { .. } => {
                             info!("=== TerminateWindow ===");
@@ -200,81 +197,26 @@ fn run_app(app: AndroidApp) {
             }
         }
 
-        // === KEYBOARD INPUT (Physical Keyboard — Arabic/English/Any!) ===
-        if let Ok(mut iter) = app.input_events_iter() {
-            loop {
-                let read_input = iter.next(|event| {
-                    if let InputEvent::KeyEvent(key_event) = event {
-                        if key_event.action() == KeyAction::Down {
-                            // Get KeyCharacterMap for this device
-                            if let Ok(map) = app.device_key_character_map(key_event.device_id()) {
-                                match map.get(key_event.key_code(), key_event.meta_state()) {
-                                    Ok(KeyMapChar::Unicode(c)) => {
-                                        // Handle combining accents (dead keys)
-                                        let final_char = if let Some(accent) = combining_accent {
-                                            match map.get_dead_char(accent, c) {
-                                                Ok(Some(combined)) => {
-                                                    info!("Combined '{}' with accent '{}' to '{}'", c, accent, combined);
-                                                    combined
-                                                }
-                                                _ => {
-                                                    keyboard_buffer.push(accent);
-                                                    c
-                                                }
-                                            }
-                                        } else {
-                                            c
-                                        };
-                                        combining_accent = None;
-                                        keyboard_buffer.push(final_char);
-                                        info!("Key pressed: '{}'", final_char);
-                                    }
-                                    Ok(KeyMapChar::CombiningAccent(accent)) => {
-                                        info!("Dead key accent: '{}'", accent);
-                                        combining_accent = Some(accent);
-                                    }
-                                    Ok(KeyMapChar::None) => {
-                                        // Non-unicode key (Enter, Backspace, arrows, etc.)
-                                        // We need to handle these separately using key_code
-                                        // For now, just log
-                                        info!("Non-unicode key: {:?}", key_event.key_code());
-                                    }
-                                    Err(e) => {
-                                        error!("Key map error: {:?}", e);
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    InputStatus::Unhandled
-                });
-                if !read_input { break; }
-            }
-        }
-
         // === RENDER ===
         if let (Some(display), Some(surface), Some(gl_ctx), Some(imgui), Some(rend), Some(tex_map)) =
             (egl_display, egl_surface, gl.as_ref(), imgui_ctx.as_mut(), renderer.as_mut(), texture_map.as_mut())
         {
             unsafe {
-            gl_ctx.clear_color(1.0, 0.0, 0.0, 1.0); // RED - debug
-            gl_ctx.clear(glow::COLOR_BUFFER_BIT);
-        }
-        let io = imgui.io_mut();
+                gl_ctx.clear_color(1.0, 0.0, 0.0, 1.0);
+                gl_ctx.clear(glow::COLOR_BUFFER_BIT);
+            }
+            let io = imgui.io_mut();
             io.mouse_pos = [touch_x, touch_y];
             io.mouse_down[0] = touch_down;
-                // Update display size if window changed
-                if let Some(nw) = app.native_window() {
-                    let w = nw.width() as f32;
-                    let h = nw.height() as f32;
-                    if io.display_size[0] != w || io.display_size[1] != h {
-                        io.display_size = [w, h];
-                    }
+            if let Some(nw) = app.native_window() {
+                let w = nw.width() as f32;
+                let h = nw.height() as f32;
+                if io.display_size[0] != w || io.display_size[1] != h {
+                    io.display_size = [w, h];
                 }
-
-            // Pass keyboard buffer to UI
+            }
             let display_size = io.display_size;
-        ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &mut keyboard_buffer, display_size);
+            ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &mut keyboard_buffer, display_size, &mut transformer_result);
 
             let draw_data = imgui.render();
             if let Err(e) = rend.render(gl_ctx, tex_map, draw_data) {

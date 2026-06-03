@@ -11,6 +11,7 @@ pub fn draw_ui(
     learner: &mut UserLearner,
     keyboard_buffer: &mut String,
     display_size: [f32; 2],
+    transformer_result: &mut Option<String>,
 ) {
     info!("=== draw_ui called ===");
     ui.window("VERSO K1 - AI Coding Assistant")
@@ -23,21 +24,26 @@ pub fn draw_ui(
             ui.text("Chat:");
             ui.separator();
 
-            ui.text("Type (physical keyboard):");
-            let mut display_buf = if keyboard_buffer.is_empty() {
-                "...".to_string()
+            // === Text Input (works with soft + physical keyboard!) ===
+            ui.text("Type here:");
+            let mut input_buf = keyboard_buffer.clone();
+            let flags = imgui::InputTextFlags::ENTER_RETURNS_TRUE
+                | imgui::InputTextFlags::AUTO_SELECT_ALL;
+            if ui.input_text_multiline("##chat_input", &mut input_buf, [400.0, 80.0])
+                .flags(flags)
+                .build()
+            {
+                // Enter pressed!
+                if !input_buf.is_empty() {
+                    learner.record_action("send_message", "chat");
+                    info!("Sent: {}", input_buf);
+                    keyboard_buffer.clear();
+                }
             } else {
-                keyboard_buffer.clone()
-            };
-            ui.input_text_multiline("##chat_input", &mut display_buf, [400.0, 80.0])
-                .read_only(true)
-                .build();
-
-            if ui.button("Send") && !keyboard_buffer.is_empty() {
-                learner.record_action("send_message", "chat");
-                keyboard_buffer.clear();
+                // User typing (update buffer)
+                *keyboard_buffer = input_buf;
             }
-            ui.same_line();
+
             if ui.button("Clear") {
                 keyboard_buffer.clear();
             }
