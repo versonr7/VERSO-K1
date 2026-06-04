@@ -1,238 +1,150 @@
-use glow::HasContext as _;
-use android_activity::{AndroidApp, MainEvent, PollEvent, InputStatus};
-use android_activity::input::{InputEvent, MotionAction};
-use khronos_egl as egl;
-use log::{info, error};
-use std::time::Duration;
+use macroquad::prelude::*;
+use log::info;
 
 mod db;
 mod transformer;
 mod learn;
-mod ui;
-
-#[link(name = "EGL")]
-extern "C" {}
 
 #[no_mangle]
-extern "C" fn android_main(app: AndroidApp) {
+extern "C" fn android_main() {
     android_logger::init_once(
         android_logger::Config::default().with_max_level(log::LevelFilter::Info)
     );
-    println!("VERSO K1 BOOT");
-    info!("=== VERSO K1 Booting ===");
-    run_app(app);
+    info!("VERSO K1 Booting...");
+    main();
 }
 
-fn run_app(app: AndroidApp) {
+#[macroquad::main("VERSO K1")]
+async fn main() {
     let db = match db::ProjectDB::new() {
         Ok(d) => { info!("DB initialized"); d }
-        Err(e) => { error!("DB init failed: {}", e); return; }
+        Err(e) => { info!("DB init failed: {}", e); return; }
     };
 
     let mut transformer = transformer::CodeTransformer::new(128, 64, 4);
     let mut learner = learn::UserLearner::new();
-
-    let egl = egl::Instance::new(egl::Static);
-
-    let mut egl_display: Option<egl::Display> = None;
-    let mut egl_surface: Option<egl::Surface> = None;
-    let mut egl_context: Option<egl::Context> = None;
-    let mut gl: Option<glow::Context> = None;
-    let mut imgui_ctx: Option<imgui::Context> = None;
-    let mut renderer: Option<imgui_glow_renderer::Renderer> = None;
-    let mut texture_map: Option<imgui_glow_renderer::SimpleTextureMap> = None;
-
-    let mut touch_x: f32 = 0.0;
-    let mut touch_y: f32 = 0.0;
-    let mut touch_down: bool = false;
-
-    let mut keyboard_buffer: String = String::with_capacity(4096);
+    let mut keyboard_buffer = String::new();
     let mut transformer_result: Option<String> = None;
 
-    let mut running = true;
+    loop {
+        clear_background(Color::from_rgba(8, 8, 18, 255));
 
-    while running {
-        app.poll_events(Some(Duration::from_millis(0)), |event| {
-            match event {
-                PollEvent::Main(main_event) => {
-                    match main_event {
-                        MainEvent::InitWindow { .. } => {
-                            if egl_display.is_some() { return; }
-                            info!("=== InitWindow: initializing EGL ===");
+        // === Top Bar ===
+        draw_rectangle(0.0, 0.0, screen_width(), 40.0, Color::from_rgba(20, 20, 40, 200));
+        let _ = draw_text("VERSO K1 - AI Assistant", 20.0, 28.0, 24.0, WHITE);
 
-                            let display = unsafe {
-                                egl.get_display(egl::DEFAULT_DISPLAY)
-                                    .expect("egl.get_display failed")
-                            };
+        // === Chat Area ===
+        let chat_y = 60.0;
+        draw_rectangle(10.0, chat_y, screen_width() - 20.0, 200.0, Color::from_rgba(30, 30, 50, 150));
+        let _ = draw_text("Chat:", 20.0, chat_y + 25.0, 20.0, WHITE);
 
-                            match egl.initialize(display) {
-                                Ok((major, minor)) => info!("EGL initialized: {}.{}", major, minor),
-                                Err(e) => { error!("egl.initialize failed: {:?}", e); return; }
-                            }
+        let mut y_offset = chat_y + 50.0;
+        if !keyboard_buffer.is_empty() {
+            let _ = draw_text(&format!("You: {}", keyboard_buffer), 20.0, y_offset, 18.0, GREEN);
+            y_offset += 25.0;
+        }
+        if let Some(ref result) = transformer_result {
+            let _ = draw_text(&format!("AI: {}", result), 20.0, y_offset, 18.0, YELLOW);
+        }
 
-                            let mut all_configs: Vec<egl::Config> = Vec::with_capacity(64);
-                            if let Err(e) = egl.get_configs(display, &mut all_configs) {
-                                error!("egl.get_configs failed: {:?}", e); return;
-                            }
-                            info!("EGL configs returned: {}", all_configs.len());
+        // === Input Field ===
+        let input_y = chat_y + 220.0;
+        draw_rectangle(10.0, input_y, screen_width() - 20.0, 50.0, Color::from_rgba(40, 40, 60, 200));
+        let _ = draw_text(&format!("> {}", keyboard_buffer), 20.0, input_y + 35.0, 20.0, WHITE);
 
-                            if all_configs.is_empty() {
-                                error!("No EGL configs returned by system");
-                                return;
-                            }
+        // === Buttons ===
+        let btn_y = input_y + 70.0;
+        if draw_button("Send", 10.0, btn_y, 100.0, 40.0, BLUE) && !keyboard_buffer.is_empty() {
+            learner.record_action("send_message", "chat");
+            transformer_result = Some(format!("Processed: {}", keyboard_buffer));
+            keyboard_buffer.clear();
+        }
 
-                            let config = match all_configs.iter().find(|&&c| {
-                                match egl.get_config_attrib(display, c, egl::SURFACE_TYPE) {
-                                    Ok(st) => (st & egl::WINDOW_BIT) != 0,
-                                    Err(_) => false,
-                                }
-                            }) {
-                                Some(&c) => { info!("Found config with WINDOW_BIT"); c }
-                                None => {
-                                    info!("No WINDOW_BIT config, using first available");
-                                    match all_configs.into_iter().next() {
-                                        Some(c) => c,
-                                        None => { error!("Could not get first config"); return; }
-                                    }
-                                }
-                            };
+        if draw_button("Clear", 120.0, btn_y, 100.0, 40.0, RED) {
+            keyboard_buffer.clear();
+            transformer_result = None;
+        }
 
-                            let native_window = match app.native_window() {
-                                Some(nw) => nw,
-                                None => { error!("No native window in InitWindow"); return; }
-                            };
+        if draw_button("Test AI", 230.0, btn_y, 100.0, 40.0, PURPLE) {
+            let tokens = vec![1u32, 2, 3, 4, 5];
+            let out = transformer.understand_code(&tokens);
+            transformer_result = Some(format!("Shape: {:?}", out.shape()));
+        }
 
-                            let surface = unsafe {
-                                match egl.create_window_surface(
-                                    display, config,
-                                    native_window.ptr().as_ptr() as egl::NativeWindowType,
-                                    None,
-                                ) {
-                                    Ok(s) => s,
-                                    Err(e) => { error!("create_window_surface failed: {:?}", e); return; }
-                                }
-                            };
-
-                            let ctx_attribs = [egl::CONTEXT_CLIENT_VERSION, 2, egl::NONE];
-                            let context = match egl.create_context(display, config, None, &ctx_attribs) {
-                                Ok(c) => c,
-                                Err(e) => { error!("create_context failed: {:?}", e); return; }
-                            };
-
-                            if let Err(e) = egl.make_current(display, Some(surface), Some(surface), Some(context)) {
-                                error!("make_current failed: {:?}", e); return;
-                            }
-
-                            let gl_ctx = unsafe {
-                                glow::Context::from_loader_function(|s| {
-                                    egl.get_proc_address(s)
-                                        .map(|p| p as *const _)
-                                        .unwrap_or(std::ptr::null())
-                                })
-                            };
-
-                            let mut imgui = imgui::Context::create();
-                            {
-                                let mut io = imgui.io_mut();
-                                io.display_size = [native_window.width() as f32, native_window.height() as f32];
-                                io.display_framebuffer_scale = [1.0, 1.0];
-                            }
-                            let mut tex_map = imgui_glow_renderer::SimpleTextureMap::default();
-                            let rend = match imgui_glow_renderer::Renderer::initialize(&gl_ctx, &mut imgui, &mut tex_map, true) {
-                                Ok(r) => r,
-                                Err(e) => { error!("Renderer init failed: {:?}", e); return; }
-                            };
-
-                            egl_display = Some(display);
-                            egl_surface = Some(surface);
-                            egl_context = Some(context);
-                            gl = Some(gl_ctx);
-                            imgui_ctx = Some(imgui);
-                            renderer = Some(rend);
-                            texture_map = Some(tex_map);
-                            info!("EGL vendor: {:?}", egl.query_string(Some(display), egl::VENDOR));
-                            info!("EGL version: {:?}", egl.query_string(Some(display), egl::VERSION));
-                            info!("=== EGL/GL/ImGui ready ===");
-                        }
-                        MainEvent::TerminateWindow { .. } => {
-                            info!("=== TerminateWindow ===");
-                            if let Some(display) = egl_display.take() {
-                                if let Some(context) = egl_context.take() {
-                                    let _ = egl.destroy_context(display, context);
-                                }
-                                if let Some(surface) = egl_surface.take() {
-                                    let _ = egl.destroy_surface(display, surface);
-                                }
-                                let _ = egl.terminate(display);
-                            }
-                            gl = None; imgui_ctx = None; renderer = None; texture_map = None;
-                        }
-                        MainEvent::Destroy => { running = false; }
-                        _ => {}
-                    }
+        // === Projects ===
+        let proj_y = btn_y + 60.0;
+        let _ = draw_text("Projects:", 20.0, proj_y, 20.0, WHITE);
+        match db.get_projects() {
+            Ok(projects) => {
+                let mut p_y = proj_y + 30.0;
+                for p in projects {
+                    let _ = draw_text(&format!("- {} ({})", p.name, p.language), 30.0, p_y, 16.0, GRAY);
+                    p_y += 22.0;
                 }
-                _ => {}
             }
-        });
-
-        if !running { break; }
-
-        // === TOUCH INPUT ===
-        if let Ok(mut iter) = app.input_events_iter() {
-            loop {
-                let read_input = iter.next(|event| {
-                    if let InputEvent::MotionEvent(motion) = event {
-                        let pointer = motion.pointer_at_index(0);
-                        touch_x = pointer.x();
-                        touch_y = pointer.y();
-                        match motion.action() {
-                            MotionAction::Down | MotionAction::Move => touch_down = true,
-                            MotionAction::Up | MotionAction::Cancel => touch_down = false,
-                            _ => {}
-                        }
-                    }
-                    InputStatus::Unhandled
-                });
-                if !read_input { break; }
+            Err(e) => {
+                let _ = draw_text(&format!("DB Error: {}", e), 30.0, proj_y + 30.0, 16.0, RED);
             }
         }
 
-        // === RENDER ===
-        if let (Some(display), Some(surface), Some(gl_ctx), Some(imgui), Some(rend), Some(tex_map)) =
-            (egl_display, egl_surface, gl.as_ref(), imgui_ctx.as_mut(), renderer.as_mut(), texture_map.as_mut())
-        {
-            unsafe {
-                gl_ctx.clear_color(1.0, 0.0, 0.0, 1.0);
-                gl_ctx.clear(glow::COLOR_BUFFER_BIT);
-            }
-            let io = imgui.io_mut();
-            io.mouse_pos = [touch_x, touch_y];
-            io.mouse_down[0] = touch_down;
-            if let Some(nw) = app.native_window() {
-                let w = nw.width() as f32;
-                let h = nw.height() as f32;
-                if io.display_size[0] != w || io.display_size[1] != h {
-                    io.display_size = [w, h];
-                }
-            }
-            let display_size = io.display_size;
-            ui::draw_ui(&imgui.frame(), &db, &mut transformer, &mut learner, &mut keyboard_buffer, display_size, &mut transformer_result);
-
-            let draw_data = imgui.render();
-            if let Err(e) = rend.render(gl_ctx, tex_map, draw_data) {
-                error!("Render error: {:?}", e);
-            }
-            if let Err(e) = egl.swap_buffers(display, surface) {
-                error!("swap_buffers failed: {:?}", e);
-            }
+        if draw_button("Remember", 10.0, proj_y + 120.0, 120.0, 35.0, DARKGREEN) {
+            let _ = db.remember_project("current", "/data/current", "rust");
         }
 
-        std::thread::sleep(std::time::Duration::from_millis(16));
+        // === Learning ===
+        let learn_y = proj_y + 170.0;
+        let _ = draw_text("Learning:", 20.0, learn_y, 20.0, WHITE);
+        let mut l_y = learn_y + 30.0;
+        for pattern in learner.get_top_patterns(5) {
+            let _ = draw_text(&format!("- {}: {}x", pattern.action, pattern.count), 30.0, l_y, 16.0, GRAY);
+            l_y += 22.0;
+        }
+
+        if draw_button("Record", 10.0, learn_y + 130.0, 120.0, 35.0, ORANGE) {
+            learner.record_action("open_file", "coding_session");
+        }
+
+        // === Keyboard Input ===
+        if let Some(c) = get_char_pressed() {
+            keyboard_buffer.push(c);
+        }
+        if is_key_pressed(KeyCode::Backspace) && !keyboard_buffer.is_empty() {
+            keyboard_buffer.pop();
+        }
+        if is_key_pressed(KeyCode::Enter) && !keyboard_buffer.is_empty() {
+            learner.record_action("send_message", "chat");
+            transformer_result = Some(format!("Sent: {}", keyboard_buffer));
+            keyboard_buffer.clear();
+        }
+        if is_key_pressed(KeyCode::Space) {
+            keyboard_buffer.push(' ');
+        }
+
+        next_frame().await;
     }
 }
 
+fn draw_button(label: &str, x: f32, y: f32, w: f32, h: f32, color: Color) -> bool {
+    let mouse = mouse_position();
+    let hovered = mouse.0 >= x && mouse.0 <= x + w && mouse.1 >= y && mouse.1 <= y + h;
+    
+    let btn_color = if hovered {
+        Color::new(color.r * 1.2, color.g * 1.2, color.b * 1.2, color.a)
+    } else {
+        color
+    };
+    
+    draw_rectangle(x, y, w, h, btn_color);
+    draw_rectangle_lines(x, y, w, h, 2.0, WHITE);
+    
+    let text_dim = measure_text(label, None, 20, 1.0);
+    let _ = draw_text(label, x + (w - text_dim.width) / 2.0, y + h / 2.0 + 7.0, 20.0, WHITE);
+    
+    hovered && is_mouse_button_pressed(MouseButton::Left)
+}
+
 #[cfg(test)]
-mod android_tests {
+mod tests {
     use std::panic;
     use std::sync::Arc;
     use std::sync::atomic::{AtomicBool, Ordering};

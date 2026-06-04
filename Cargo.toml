@@ -4,19 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-android-activity = { version = "0.6.1", features = ["native-activity"] }
-khronos-egl = { version = "6.0.0", features = ["static", "no-pkg-config"] }
-glow = "0.12"
-imgui = "0.11"
-imgui-glow-renderer = "0.11"
-log = "0.4"
-android_logger = "0.14"
-ndarray = { version = "0.15", features = ["std"] }
+macroquad = "0.4"
 rusqlite = { version = "0.29", features = ["bundled"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-anyhow = "1.0"
-thiserror = "1.0"
+ndarray = { version = "0.15", features = ["std"] }
+log = "0.4"
+android_logger = "0.14"
 
 [lib]
 crate-type = ["cdylib"]
@@ -30,7 +24,6 @@ permissions = [
 label = "VERSO K1"
 target_sdk_version = 30
 min_sdk_version = 21
-features = ["native-activity"]
 
 [[package.metadata.android.application.activity]]
 name = "android.app.NativeActivity"
